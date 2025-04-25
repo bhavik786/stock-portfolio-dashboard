@@ -111,3 +111,21 @@ exports.updateStock = async (req, res, next) => {
     next(err);
   }
 };
+
+// controllers/stockController.js
+exports.deleteStock = async (req, res, next) => {
+  try {
+    const { id } = req.params;
+
+    const stock = await Stock.findOne({ _id: id, user: req.userId });
+    if (!stock) {
+      return res.status(404).json({ message: "Stock not found" });
+    }
+
+    await Stock.deleteOne({ _id: id, user: req.userId });
+
+    res.json({ message: "Stock deleted successfully", id });
+  } catch (err) {
+    next(err);
+  }
+};
