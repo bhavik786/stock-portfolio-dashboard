@@ -32,27 +32,38 @@ export default function PortfolioTable({ stocks, currency, onUpdate }) {
         </thead>
         <tbody className="divide-y divide-gray-100 text-sm">
           {stocks.map((s) => {
-            const value = currency === "CAD" ? s.valueCAD : s.valueUSD;
-            const profit = currency === "CAD" ? s.profitCAD : s.profitUSD;
+            const value = currency === "CAD" ? s?.valueCAD : s?.valueUSD;
+            const profit = currency === "CAD" ? s?.profitCAD : s?.profitUSD;
+
             return (
               <tr key={s._id} className="hover:bg-gray-50">
-                <td className="px-4 py-3">{s.symbol}</td>
-                <td className="px-4 py-3">{s.shares}</td>
-                <td className="px-4 py-3">{(s?.buyPrice || 0).toFixed(2)}</td>
-                <td className="px-4 py-3">{(s?.livePrice || 0).toFixed(2)}</td>
+                <td className="px-4 py-3">{s.symbol || "-"}</td>
                 <td className="px-4 py-3">
-                  {currency === "CAD"
-                    ? (s?.valueCAD || 0).toFixed(2)
-                    : (s?.valueUSD || 0).toFixed(2)}
+                  {s.shares != null ? s.shares : "-"}
                 </td>
+
+                <td className="px-4 py-3">
+                  {s?.buyPrice != null ? s.buyPrice.toFixed(2) : "0.00"}
+                </td>
+
+                <td className="px-4 py-3">
+                  {s?.livePrice != null ? s.livePrice.toFixed(2) : "0.00"}
+                </td>
+
+                <td className="px-4 py-3">
+                  {value != null ? value.toFixed(2) : "0.00"}
+                </td>
+
                 <td
                   className={`px-4 py-3 font-medium ${
                     profit >= 0 ? "text-primary" : "text-red-500"
                   }`}
                 >
-                  {profit >= 0 ? "+" : "-"}
-                  {Math.abs(profit).toFixed(2)}
+                  {profit != null
+                    ? (profit >= 0 ? "+" : "-") + Math.abs(profit).toFixed(2)
+                    : "0.00"}
                 </td>
+
                 <td className="px-4 py-3 space-x-2">
                   <button onClick={() => handleDelete(s._id)}>
                     <TrashIcon className="h-5 w-5 text-gray-400 hover:text-red-500" />
