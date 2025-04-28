@@ -7,6 +7,7 @@ const connectDB = require("./config/db");
 // route imports
 const authRoutes = require("./routes/authRoutes");
 const stockRoutes = require("./routes/stockRoutes");
+const adminRoutes = require("./routes/adminRoutes");
 
 dotenv.config();
 connectDB();
@@ -20,6 +21,7 @@ app.use(express.json());
 // routes
 app.use("/api/auth", authRoutes);
 app.use("/api/stocks", stockRoutes);
+app.use("/api/admin", adminRoutes);
 
 // global error handler
 app.use((err, req, res, next) => {

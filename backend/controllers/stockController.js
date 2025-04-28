@@ -23,72 +23,140 @@ exports.addStock = async (req, res, next) => {
   }
 };
 
-exports.getPortfolio = async (req, res, next) => {
+// //old
+// exports.getPortfolio = async (req, res, next) => {
+//   try {
+//     // 1) grab stocks
+//     const stocks = await Stock.find({ user: req.userId }).lean();
+
+//     // 2) get FX rates once
+//     const usdToCad = await fetchExchangeRate("USD", "CAD");
+//     const cadToUsd = 1 / usdToCad;
+
+//     // initialize totals
+//     const totals = { native: 0, inCAD: 0, inUSD: 0 };
+//     const detailed = [];
+
+//     // 3) loop
+//     for (const s of stocks) {
+//       const {
+//         symbol,
+//         shares,
+//         buyPrice,
+//         currency = "CAD", // ← default if missing
+//       } = s;
+
+//       // live price & native P/L
+//       const livePrice = await fetchLivePrice(symbol);
+//       const costNative = buyPrice * shares;
+//       const valueNative = livePrice * shares;
+//       const profitNative = valueNative - costNative;
+
+//       // 4) convert
+//       const valueCAD =
+//         currency === "USD" ? valueNative * usdToCad : valueNative;
+//       const valueUSD =
+//         currency === "CAD" ? valueNative * cadToUsd : valueNative;
+
+//       const costCAD = currency === "USD" ? costNative * usdToCad : costNative;
+//       const costUSD = currency === "CAD" ? costNative * cadToUsd : costNative;
+
+//       const profitCAD = valueCAD - costCAD;
+//       const profitUSD = valueUSD - costUSD;
+
+//       // 5) accumulate
+//       totals.native += profitNative;
+//       totals.inCAD += profitCAD;
+//       totals.inUSD += profitUSD;
+
+//       // 6) push detailed record
+//       detailed.push({
+//         ...s,
+//         livePrice,
+//         profitNative,
+//         valueNative,
+//         valueCAD,
+//         valueUSD,
+//         profitCAD,
+//         profitUSD,
+//       });
+//     }
+
+//     // 7) respond
+//     return res.json({
+//       rates: { usdToCad, cadToUsd },
+//       totals,
+//       stocks: detailed,
+//     });
+//   } catch (err) {
+//     next(err);
+//   }
+// };
+
+//new
+exports.getPortfolio = async (req, res) => {
   try {
-    // 1) grab stocks
-    const stocks = await Stock.find({ user: req.userId }).lean();
+    const userId = req.userId;
+    const stocks = await Stock.find({ user: userId });
 
-    // 2) get FX rates once
-    const usdToCad = await fetchExchangeRate("USD", "CAD");
-    const cadToUsd = 1 / usdToCad;
-
-    // initialize totals
-    const totals = { native: 0, inCAD: 0, inUSD: 0 };
-    const detailed = [];
-
-    // 3) loop
-    for (const s of stocks) {
-      const {
-        symbol,
-        shares,
-        buyPrice,
-        currency = "CAD", // ← default if missing
-      } = s;
-
-      // live price & native P/L
-      const livePrice = await fetchLivePrice(symbol);
-      const costNative = buyPrice * shares;
-      const valueNative = livePrice * shares;
-      const profitNative = valueNative - costNative;
-
-      // 4) convert
-      const valueCAD =
-        currency === "USD" ? valueNative * usdToCad : valueNative;
-      const valueUSD =
-        currency === "CAD" ? valueNative * cadToUsd : valueNative;
-
-      const costCAD = currency === "USD" ? costNative * usdToCad : costNative;
-      const costUSD = currency === "CAD" ? costNative * cadToUsd : costNative;
-
-      const profitCAD = valueCAD - costCAD;
-      const profitUSD = valueUSD - costUSD;
-
-      // 5) accumulate
-      totals.native += profitNative;
-      totals.inCAD += profitCAD;
-      totals.inUSD += profitUSD;
-
-      // 6) push detailed record
-      detailed.push({
-        ...s,
-        livePrice,
-        profitNative,
-        valueNative,
-        valueCAD,
-        valueUSD,
-        profitCAD,
-        profitUSD,
-      });
+    if (!stocks.length) {
+      return res.status(200).json({ rates: {}, totals: {}, stocks: [] });
     }
 
-    // 7) respond
-    return res.json({
-      rates: { usdToCad, cadToUsd },
+    // Fetch USD↔CAD exchange rates once
+    const rates = await fetchExchangeRate();
+
+    // 🚀 Fetch all live prices in parallel
+    const updatedStocks = await Promise.all(
+      stocks.map(async (stock) => {
+        const livePrice = await fetchLivePrice(stock.symbol, stock.currency);
+
+        stock = stock.toObject(); // allow mutation
+        stock.livePrice = livePrice;
+
+        const valueNative = livePrice * stock.shares;
+        const valueCAD =
+          stock.currency === "CAD" ? valueNative : valueNative * rates.usdToCad;
+        const valueUSD =
+          stock.currency === "USD" ? valueNative : valueNative * rates.cadToUsd;
+
+        stock.valueNative = valueNative;
+        stock.valueCAD = valueCAD;
+        stock.valueUSD = valueUSD;
+
+        stock.profitNative = (livePrice - stock.buyPrice) * stock.shares;
+        stock.profitCAD =
+          stock.currency === "CAD"
+            ? stock.profitNative
+            : stock.profitNative * rates.usdToCad;
+        stock.profitUSD =
+          stock.currency === "USD"
+            ? stock.profitNative
+            : stock.profitNative * rates.cadToUsd;
+
+        return stock;
+      })
+    );
+
+    // Calculate portfolio totals
+    const totals = updatedStocks.reduce(
+      (acc, stock) => {
+        acc.native += stock.profitNative;
+        acc.inCAD += stock.profitCAD;
+        acc.inUSD += stock.profitUSD;
+        return acc;
+      },
+      { native: 0, inCAD: 0, inUSD: 0 }
+    );
+
+    res.status(200).json({
+      rates,
       totals,
-      stocks: detailed,
+      stocks: updatedStocks,
     });
   } catch (err) {
-    next(err);
+    console.error("🔥 getPortfolio error:", err.message);
+    res.status(500).json({ message: "Server Error", error: err.message });
   }
 };
 exports.updateStock = async (req, res, next) => {
